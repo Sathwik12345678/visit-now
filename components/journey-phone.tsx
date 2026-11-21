@@ -11,12 +11,16 @@ export default function JourneyPhone({screen}:{screen:ScreenType}) {
   const media=window.matchMedia('(prefers-reduced-motion: reduce)');
   let frame=0;
   let anchors:{x:number;y:number}[]=[];
-  let howTop=0,howHeight=0,aboutTop=0;
+  let howTop=0,howHeight=0,aboutTop=0,appTop=0;
+  let docked=false,initialized=false,dockTime=0;
+  let lastPose={x:0,y:0,scale:1,rotation:0};
+  let dockFrom=lastPose;
   const measure=()=>{
    anchors=['phone-start','phone-about','phone-finish','phone-download'].map(id=>{const r=document.getElementById(id)!.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+window.scrollY+r.height/2}});
    const how=document.getElementById('how')!;
    howTop=how.getBoundingClientRect().top+window.scrollY;howHeight=how.offsetHeight;
    aboutTop=document.getElementById('about')!.getBoundingClientRect().top+window.scrollY;
+   appTop=document.getElementById('app')!.getBoundingClientRect().top+window.scrollY;
    schedule();
   };
   const draw=()=>{
@@ -38,20 +42,55 @@ export default function JourneyPhone({screen}:{screen:ScreenType}) {
    const depart=dock+Math.min(h*.18,(d.y-c.y)*.15);
    const arrive=d.y-center;
    const travel=smooth(clamp((y-depart)/Math.max(1,arrive-depart)));
-   const x=mix(mix(mix(a.x,b.x,t),c.x,u),d.x,travel);
+   const desktop=w>=1024;
+   const howSide=desktop?smooth(clamp((y-(howTop-h*.7))/(h*.55))):0;
+   const storyX=mix(mix(a.x,b.x,t),a.x,howSide);
+   let x=mix(mix(storyX,c.x,u),d.x,travel);
    let py=y<a.y-center?a.y-y:center;
    if(y>dock)py=y<depart?c.y-y:y<arrive?mix(c.y-depart,center,travel):d.y-y;
+   let phoneSize=mix(mix(1,scale,t),1,u);
+   let rotation=mix(mix(-9,0,t),7,travel);
+   const shouldDock=desktop && y>=appTop-h*.75;
+   if(shouldDock && !docked){
+    dockTime=initialized?performance.now():0;
+    dockFrom={...lastPose};
+   }
+   docked=shouldDock;
+   if(desktop && !shouldDock && y>=leaveStart){x=a.x;phoneSize=scale}
+   if(shouldDock && y<depart){
+    const progress=dockTime?smooth(clamp((performance.now()-dockTime)/450)):1;
+    // Descend beside the heading first, then slide into the actual showcase slot.
+    x=mix(dockFrom.x,c.x,smooth(clamp((progress-.6)/.4)));
+    py=mix(dockFrom.y,c.y,smooth(clamp(progress/.6)))-y;
+    phoneSize=mix(dockFrom.scale,1,progress);
+    rotation=mix(dockFrom.rotation,0,progress);
+    if(progress<1)schedule();
+   }
+   initialized=true;
+   lastPose={x,y:py+y,scale:phoneSize,rotation};
    node.style.visibility=py < -400 || py > h+400?'hidden':'visible';
-   node.style.transform=`translate3d(${x}px,${py}px,0) translate(-50%,-50%) scale(${mix(mix(1,scale,t),1,u)}) rotate(${mix(mix(-9,0,t),7,travel)}deg)`;
+   node.style.transform=`translate3d(${x}px,${py}px,0) translate(-50%,-50%) scale(${phoneSize}) rotate(${rotation}deg)`;
    const about=clamp((y-aboutTop+h*.4)/(h*.35))*(1-leave);
    const steps=clamp((y-howTop+h*.35)/(h*.3))*(1-leave);
-   node.querySelector<HTMLElement>('.journey-about-screen')!.style.opacity=String(about*(1-steps));
-   node.querySelector<HTMLElement>('.journey-steps-screen')!.style.opacity=String(steps);
+   node.querySelector<HTMLElement>('.journey-about-screen')!.style.opacity=String(shouldDock?0:about*(1-steps));
+   node.querySelector<HTMLElement>('.journey-steps-screen')!.style.opacity=String(shouldDock?0:steps);
    node.querySelectorAll<HTMLElement>('.journey-stack-card').forEach((card,i)=>{
     const progress=clamp((y-howTop-h*.1-i*h*.38)/(h*.32));
     card.style.transform=`translateY(${(1-progress)*230+i*14}px) scale(${1-i*.025})`;
     card.style.opacity=String(progress);
    });
+   // On phones, keep the story within its own stage so it never covers copy or controls.
+   if(w<768){
+    const stageStart=howTop+260;
+    const stageEnd=howTop+howHeight-70;
+    const phoneScale=Math.min(1.15,(h-170)/420,(w-56)/205);
+    const half=210*phoneScale;
+    const mobileY=Math.max(stageStart+half-y,Math.min(center,stageEnd-half-y));
+    node.style.visibility=y+h>stageStart && y<stageEnd?'visible':'hidden';
+    node.style.transform=`translate3d(${w/2}px,${mobileY}px,0) translate(-50%,-50%) scale(${phoneScale})`;
+    node.querySelector<HTMLElement>('.journey-about-screen')!.style.opacity='0';
+    node.querySelector<HTMLElement>('.journey-steps-screen')!.style.opacity='1';
+   }
   };
   const schedule=()=>{if(!frame)frame=requestAnimationFrame(draw)};
   const observer=new ResizeObserver(measure);
