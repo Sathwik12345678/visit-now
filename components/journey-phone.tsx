@@ -25,7 +25,7 @@ export default function JourneyPhone({screen}:{screen:ScreenType}) {
   };
   const draw=()=>{
    frame=0;
-   const enabled=!media.matches;
+   const enabled=!media.matches && window.innerWidth>=1024;
    document.documentElement.classList.toggle('journey-enabled',enabled);
    if(!enabled){node.style.visibility='hidden';return}
    const y=window.scrollY,h=window.innerHeight,w=window.innerWidth;
@@ -79,18 +79,6 @@ export default function JourneyPhone({screen}:{screen:ScreenType}) {
     card.style.transform=`translateY(${(1-progress)*230+i*14}px) scale(${1-i*.025})`;
     card.style.opacity=String(progress);
    });
-   // On phones, keep the story within its own stage so it never covers copy or controls.
-   if(w<768){
-    const stageStart=howTop+260;
-    const stageEnd=howTop+howHeight-70;
-    const phoneScale=Math.min(1.15,(h-170)/420,(w-56)/205);
-    const half=210*phoneScale;
-    const mobileY=Math.max(stageStart+half-y,Math.min(center,stageEnd-half-y));
-    node.style.visibility=y+h>stageStart && y<stageEnd?'visible':'hidden';
-    node.style.transform=`translate3d(${w/2}px,${mobileY}px,0) translate(-50%,-50%) scale(${phoneScale})`;
-    node.querySelector<HTMLElement>('.journey-about-screen')!.style.opacity='0';
-    node.querySelector<HTMLElement>('.journey-steps-screen')!.style.opacity='1';
-   }
   };
   const schedule=()=>{if(!frame)frame=requestAnimationFrame(draw)};
   const observer=new ResizeObserver(measure);
